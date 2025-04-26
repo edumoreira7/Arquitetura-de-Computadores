@@ -1,70 +1,82 @@
 ORG 0000H
 
-; ----- Fase 1: Mostra a sequência de LEDs -----
 START:
-    MOV DPTR, #SEQUENCIA  ; Carrega o endereço da sequência
-    MOV R0, #0            ; Inicializa o índice da sequência (0)
+    MOV TMOD, #01H
+    SETB TR0
+
+ESPERA_USUARIO:
+    MOV A, P2
+    CJNE A, #0FFH, CONTINUA
+    SJMP ESPERA_USUARIO
+
+CONTINUA:
+    MOV DPTR, #SEQUENCIA
+    MOV R0, #0
 
 MOSTRA_SEQUENCIA:
-    MOV A, R0             ; Pega o índice da sequência
-    MOVC A, @A+DPTR       ; A = valor da sequência no índice
-    MOV P1, A             ; Exibe o valor da sequência nos LEDs (P1)
-    ACALL DELAY           ; Espera um tempo para mostrar o LED
+    MOV A, TL0
+    ANL A, #07H
+    CJNE A, #05H, OK
+    MOV A, #00H
+OK:
+    CJNE A, #06H, OK2
+    MOV A, #01H
+OK2:
+    CJNE A, #07H, MOSTRA_LED
+    MOV A, #02H
 
-    INC R0                ; Avança para o próximo índice
-    CJNE R0, #5, MOSTRA_SEQUENCIA ; Repete até 5 LEDs
+MOSTRA_LED:
+    MOV R5, A
+    MOV A, R5
+    MOVC A, @A+DPTR
+    MOV P1, A
+    ACALL DELAY
 
-    MOV P1, #0FFh         ; Desliga todos os LEDs após mostrar a sequência
+    INC R0
+    CJNE R0, #5, MOSTRA_SEQUENCIA
 
-; ----- Fase 2: Modo de controle manual dos LEDs -----
-; Configurações iniciais
-MOV P1, #0FFh  ; Todos LEDs apagados inicialmente (1 = apagado)
-MOV P2, #0FFh  ; Habilita pull-ups para os botões (teclas)
+    MOV P1, #0FFH
+    MOV P2, #0FFH
 
 MAIN:
-    ACALL LER_TECLA    ; Lê qual tecla foi pressionada
-    CJNE A, #0FFh, ACENDE_LED  ; Se alguma tecla foi pressionada
-    SJMP MAIN          ; Se não, continua no loop
+    ACALL LER_TECLA
+    CJNE A, #0FFH, ACENDE_LED
+    SJMP MAIN
 
 ACENDE_LED:
-    CPL A              ; Corrige a inversão (botão pressionado volta para 0)
-    MOV P1, A          ; Acende o LED correspondente (0 = aceso)
-    ACALL DELAY        ; Delay para evitar bouncing
-    SJMP MAIN          ; Volta para o loop principal
+    CPL A
+    MOV P1, A
+    ACALL DELAY
+    SJMP MAIN
 
-; ---- Sub-rotina de leitura de tecla ----
-; Retorna em A o valor da tecla pressionada (com bits invertidos)
-; 0FFh = nenhuma tecla pressionada
 LER_TECLA:
 ESPERA_SOLTAR:
-    MOV A, P2          ; Lê o estado atual das teclas
-    CJNE A, #0FFh, ESPERA_SOLTAR  ; Espera até todas as teclas serem soltas
+    MOV A, P2
+    CJNE A, #0FFH, ESPERA_SOLTAR
 
 ESPERA_PRESSIONAR:
-    MOV A, P2          ; Lê o estado das teclas novamente
-    CJNE A, #0FFh, TECLA_PRESSIONADA  ; Se alguma tecla foi pressionada
+    MOV A, P2
+    CJNE A, #0FFH, TECLA_PRESSIONADA
     SJMP ESPERA_PRESSIONAR
 
 TECLA_PRESSIONADA:
-    CPL A              ; Inverte os bits (botão ativo em 0 -> 1)
-    RET                ; Retorna o valor da tecla
+    CPL A
+    RET
 
-; ---- Sub-rotina de delay ----
 DELAY:
-    MOV R6, #0FFh
+    MOV R6, #0FFH
 DELAY_LOOP1:
-    MOV R7, #0FFh
+    MOV R7, #0FFH
 DELAY_LOOP2:
     DJNZ R7, DELAY_LOOP2
     DJNZ R6, DELAY_LOOP1
     RET
 
-; ---- Dados da sequência de LEDs ----
 SEQUENCIA:
-    DB 11111110b       ; LED 0 aceso
-    DB 10111111b       ; LED 5 aceso
-    DB 11111011b       ; LED 2 aceso
-    DB 11011111b       ; LED 6 aceso
-    DB 11101111b       ; LED 4 aceso
+    DB 11111110B
+    DB 10111111B
+    DB 11111011B
+    DB 11011111B
+    DB 11101111B
 
 END
