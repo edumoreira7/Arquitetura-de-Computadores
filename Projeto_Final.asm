@@ -1,6 +1,8 @@
 
 RS      equ     P1.3    ; Reg Select ligado em P1.3
 EN      equ     P1.2    ; Enable ligado em P1.2
+PONTOS  EQU 20H      ; local da RAM onde vamos guardar os pontos
+RECORDE EQU 21H	
 
 ORG 0000H
     LJMP MAIN
@@ -21,24 +23,30 @@ ERROU:
 SUAVEZ:
 	DB "SUA VEZ"
 	DB 00H
+STRPONTOS:
+	DB "PONTOS"
+	DB 00H
+STRRECORDE:
+	DB "RECORDE"
+	DB 00H
 
 ORG 0100H
 MAIN:
     ; Inicializa LCD e exibe mensagem
     ACALL lcd_init
+	MOV PONTOS, #0       ; zera os pontos acumulados
+	MOV RECORDE, #0
 
     ; Inicializa Timer
     MOV TMOD, #01H
     SETB TR0
 
 MENSAGEM:
-; Primeira linha: "APERTE 0"
     MOV A, #01H
     ACALL posicionaCursor
     MOV DPTR, #APERTE0
 	ACALL escreveStringROM
 
-    ; Segunda linha: "PARA INICIAR"
     MOV A, #0C0H
     ACALL posicionaCursor
     MOV DPTR, #PARAINICIAR
@@ -53,6 +61,18 @@ ESPERA_USUARIO:
 
 CONTINUA:
 	ACALL clearDisplay
+	ACALL DELAY_100MS
+    MOV A, #01H
+    ACALL posicionaCursor
+    MOV DPTR, #STRPONTOS
+	ACALL escreveStringROM
+	MOV A, #08h
+	ACALL posicionaCursor
+	ACALL MOSTRA_PONTOS
+
+	ACALL DELAY_500MS
+
+	ACALL clearDisplay
     MOV DPTR, #SEQUENCIA
     MOV R0, #30H          ; endereço base da RAM para armazenar a sequência mostrada
     MOV R7, #0            ; contador de LEDs mostrados (0 a 4)
@@ -61,7 +81,10 @@ CONTINUA:
 GERA_SEQUENCIA:
     ; Usa TH0 como semente aleatória
     MOV A, TH0
-    ANL A, #00000111B     ; mascara para valores de 0 a 7
+    XRL A, TL0         ; mistura com TL0
+    XRL A, P1          ; mistura com entradas do pino P1
+    ANL A, #00000111B  ; limita a 0–7
+    ; mascara para valores de 0 a 7
     
     ; Verifica se o valor é válido (0-7)
     CJNE A, #8, VALOR_OK
@@ -103,38 +126,72 @@ VERIFICA:
     MOV A, @R0            ; carrega valor da sequência original
     CJNE A, B, ERRO
 
-    ; Feedback visual - LED correto
     MOV P1, B
     ACALL DELAY_200MS
     MOV P1, #0FFH
 
-    ; Próxima comparação
     INC R0
     INC R6
     CJNE R6, #5, COMPARA_USUARIO
 
-    ; Todas as teclas conferem!
     SJMP ACERTO
 
 ERRO:
-	ACALL clearDisplay
+    ; Comparar PONTOS com RECORDE
+    MOV A, PONTOS
+    MOV B, RECORDE
+    CJNE A, B, VERIFICA_MAIOR
+    SJMP CONTINUA_ERRO       ; Se for igual, pula
+
+VERIFICA_MAIOR:
+    ; Se A < B, não atualiza
+    CLR C
+    SUBB A, B
+    JC CONTINUA_ERRO         ; Se A < B, carry = 1 → não atualiza
+
+    ; A >= B → atualiza recorde
+    MOV A, PONTOS
+    MOV RECORDE, A
+
+CONTINUA_ERRO:
+    MOV PONTOS, #0           ; zera os pontos após erro
+    ACALL clearDisplay
     ACALL DELAY_200MS
     MOV A, #01H
     ACALL posicionaCursor
     MOV DPTR, #ERROU
-	ACALL escreveStringROM
+    ACALL escreveStringROM
     ACALL DELAY_200MS
-    SJMP MENSAGEM   ; Reinicia o jogo
+	
+	ACALL clearDisplay
+	ACALL DELAY_100MS
+	MOV A, #01H
+    ACALL posicionaCursor
+    MOV DPTR, #STRRECORDE
+    ACALL escreveStringROM
+	MOV A, #09h
+	ACALL posicionaCursor
+	ACALL MOSTRA_RECORDE
+	ACALL DELAY_500MS
+	ACALL clearDisplay
+	ACALL DELAY_100MS
+	
+	
+    LJMP MENSAGEM
 
 ACERTO:
+	MOV A, PONTOS
+    ADD A, #1
+    MOV PONTOS, A     ; atualiza a pontuação acumulada
+
 	ACALL clearDisplay
 	ACALL DELAY_200MS
-    MOV A, #01H
-    ACALL posicionaCursor
-    MOV DPTR, #ACERTOU
-   	ACALL escreveStringROM
-    ACALL DELAY_200MS
-    LJMP MENSAGEM   ; Reinicia o jogo
+	MOV A, #01H
+	ACALL posicionaCursor
+	MOV DPTR, #ACERTOU
+	ACALL escreveStringROM
+	ACALL DELAY_200MS
+	LJMP MENSAGEM    ; Reinicia o jogo
 
 ; ==============================================
 ; Rotinas de leitura de tecla
@@ -152,7 +209,48 @@ TECLA_PRESSIONADA:
     CPL A
     RET
 
-; Delays melhor calibrados
+; Entrada: R7 com o número de 0 a 255
+; Saída: mostra no display os dígitos centena, dezena e unidade
+
+MOSTRA_PONTOS:
+    MOV A, PONTOS     ; carrega a pontuação acumulada
+    MOV B, #100
+    DIV AB           ; A = centena, B = resto
+    ADD A, #'0'      ; converte para ASCII
+    ACALL sendCharacter  ; mostra caractere da centena
+
+    MOV A, B         ; A = resto
+    MOV B, #10
+    DIV AB           ; A = dezena, B = unidade
+    ADD A, #'0'
+    ACALL sendCharacter  ; mostra caractere da dezena
+
+    MOV A, B
+    ADD A, #'0'
+    ACALL sendCharacter  ; mostra caractere da unidade
+
+    RET
+
+MOSTRA_RECORDE:
+    MOV A, RECORDE     ; carrega a pontuação acumulada
+    MOV B, #100
+    DIV AB           ; A = centena, B = resto
+    ADD A, #'0'      ; converte para ASCII
+    ACALL sendCharacter  ; mostra caractere da centena
+
+    MOV A, B         ; A = resto
+    MOV B, #10
+    DIV AB           ; A = dezena, B = unidade
+    ADD A, #'0'
+    ACALL sendCharacter  ; mostra caractere da dezena
+
+    MOV A, B
+    ADD A, #'0'
+    ACALL sendCharacter  ; mostra caractere da unidade
+
+    RET
+
+
 DELAY_500MS:
     MOV R3, #5
 DELAY_500_LOOP:
