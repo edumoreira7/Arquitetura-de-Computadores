@@ -5,7 +5,7 @@ Este projeto implementa um **jogo da memória** com LEDs utilizando Assembly par
 
 ---
 
-## ⚙Funcionamento
+## Funcionamento
 
 1. **Tela Inicial (LCD)**  
    O jogo exibe no LCD as mensagens "**APERTE 0**" e "**PARA INICIAR**", aguardando o jogador pressionar qualquer botão em `P2`.
